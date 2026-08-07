@@ -34,6 +34,23 @@ export default async function DashboardPage() {
   const canClaimBonus = !user.lastDailyBonus || Date.now() - user.lastDailyBonus >= oneDayMs;
   const referralLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/register?ref=${user.referralCode}`;
 
+  const handleClaimBonus = async () => {
+    'use server';
+    await claimDailyBonusAction();
+  };
+  const handleUpgrade = async (formData: FormData) => {
+    'use server';
+    await upgradeMinerAction(formData);
+  };
+  const handleDeposit = async (formData: FormData) => {
+    'use server';
+    await depositAction(formData);
+  };
+  const handleWithdraw = async (formData: FormData) => {
+    'use server';
+    await withdrawAction(formData);
+  };
+
   return (
     <main className="container" style={{ paddingTop: '40px', paddingBottom: '60px' }}>
 
@@ -87,7 +104,7 @@ export default async function DashboardPage() {
         <div className="glass-panel text-center">
           <h2 className="text-neon-green mb-2" style={{ fontSize: '1.1rem' }}>🎁 Daily Bonus</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Streak: <strong className="text-neon-green">{user.dailyStreak || 0} days</strong></p>
-          <form action={claimDailyBonusAction}>
+          <form action={handleClaimBonus}>
             <button className="btn-cyber" style={{ opacity: canClaimBonus ? 1 : 0.4 }} disabled={!canClaimBonus}>
               {canClaimBonus ? 'Claim Bonus' : 'Come back tomorrow'}
             </button>
@@ -110,7 +127,7 @@ export default async function DashboardPage() {
                   <div style={{ color: LEVEL_COLORS[miner.level], fontWeight: 700, textTransform: 'uppercase', fontSize: '0.9rem' }}>{miner.level}</div>
                   <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>+{getMinerOutput(miner.level)}/cycle</div>
                   {nextLevel && (
-                    <form action={upgradeMinerAction} style={{ marginTop: '0.5rem' }}>
+                    <form action={handleUpgrade} style={{ marginTop: '0.5rem' }}>
                       <input type="hidden" name="minerId" value={miner.id} />
                       <input type="hidden" name="targetLevel" value={nextLevel} />
                       <button className="btn-cyber btn-cyber-purple" style={{ padding: '6px 12px', fontSize: '11px' }}
@@ -143,7 +160,7 @@ export default async function DashboardPage() {
         {/* Deposit */}
         <div className="glass-panel">
           <h2 className="text-neon-green mb-3" style={{ fontSize: '1.1rem' }}>💳 Deposit Funds</h2>
-          <form action={depositAction} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form action={handleDeposit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Amount (USD, min $5)</label>
               <input name="amount" type="number" min="5" defaultValue="10" required style={{ width: '100%', padding: '10px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--glass-border)', color: 'white' }} />
@@ -166,7 +183,7 @@ export default async function DashboardPage() {
         {/* Withdraw */}
         <div className="glass-panel">
           <h2 className="text-neon-green mb-3" style={{ fontSize: '1.1rem' }}>💸 Withdraw Funds</h2>
-          <form action={withdrawAction} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form action={handleWithdraw} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Amount (USD)</label>
               <input name="amount" type="number" min="1" max={user.usdBalance} required style={{ width: '100%', padding: '10px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--glass-border)', color: 'white' }} />
