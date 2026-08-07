@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
-const DB_FILE = path.join(process.cwd(), 'data.json');
-
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+const DB_FILE = isVercel 
+  ? path.join('/tmp', 'data.json') 
+  : path.join(process.cwd(), 'data.json');
 export type MinerLevel = 'basic' | 'pro' | 'elite';
 
 export interface Miner {
