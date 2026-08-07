@@ -20,33 +20,31 @@ export async function getSessionUser() {
 
 // ─── AUTH ──────────────────────────────────────────
 
-export async function loginAction(formData: FormData) {
+export async function loginAction(formData: FormData): Promise<void> {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
-  if (!username || !password) return { error: 'Username and password are required' };
+  if (!username || !password) redirect('/login');
   const user = getUser(username);
-  if (!user) return { error: 'Invalid credentials' };
+  if (!user) redirect('/login');
 
-  // Support both plain-text (legacy admin) and hashed passwords
   const valid = user.passwordHash.startsWith('$2')
     ? await bcrypt.compare(password, user.passwordHash)
     : user.passwordHash === password;
 
-  if (!valid) return { error: 'Invalid credentials' };
+  if (!valid) redirect('/login');
   (await cookies()).set('session', user.id, { httpOnly: true, sameSite: 'lax' });
   redirect('/dashboard');
 }
 
-export async function registerAction(formData: FormData) {
+export async function registerAction(formData: FormData): Promise<void> {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
   const email = (formData.get('email') as string) || '';
   const refCode = (formData.get('ref') as string) || '';
 
-  if (!username || !password) return { error: 'Required' };
-  if (username.length < 3) return { error: 'Username must be at least 3 characters' };
-  if (password.length < 6) return { error: 'Password must be at least 6 characters' };
-  if (getUser(username)) return { error: 'Username already taken' };
+  if (!username || !password) redirect('/register');
+  if (username.length < 3 || password.length < 6) redirect('/register');
+  if (getUser(username)) redirect('/register');
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -62,7 +60,6 @@ export async function registerAction(formData: FormData) {
     dailyStreak: 0,
   };
 
-  // Handle referral bonus
   if (refCode) {
     const referrer = getUserByReferralCode(refCode);
     if (referrer) {
@@ -78,34 +75,34 @@ export async function registerAction(formData: FormData) {
   redirect('/dashboard');
 }
 
-export async function logoutAction() {
+export async function logoutAction(): Promise<void> {
   (await cookies()).delete('session');
   redirect('/');
 }
 
 // ─── GAME ──────────────────────────────────────────
 
-export async function buyMinerAction() {
+export async function buyMinerAction(): Promise<void> {
   const user = await getSessionUser();
-  if (!user) return redirect('/login');
+  if (!user) redirect('/login');
   user.miners = user.miners || [];
   user.miners.push({ id: Date.now().toString(), level: 'basic' });
   saveUser(user);
   revalidatePath('/dashboard');
 }
 
-export async function upgradeMinerAction(formData: FormData) {
+export async function upgradeMinerAction(formData: FormData): Promise<void> {
   const user = await getSessionUser();
-  if (!user) return redirect('/login');
+  if (!user) redirect('/login');
 
   const minerId = formData.get('minerId') as string;
   const targetLevel = formData.get('targetLevel') as MinerLevel;
   const cost = getMinerUpgradeCost(targetLevel);
 
-  if (user.emeralds < cost) return { error: 'Not enough Emeralds to upgrade' };
+  if (user.emeralds < cost) { revalidatePath('/dashboard'); return; }
 
   const miner = (user.miners || []).find(m => m.id === minerId);
-  if (!miner) return { error: 'Miner not found' };
+  if (!miner) { revalidatePath('/dashboard'); return; }
 
   user.emeralds -= cost;
   miner.level = targetLevel;
@@ -114,9 +111,9 @@ export async function upgradeMinerAction(formData: FormData) {
   revalidatePath('/dashboard');
 }
 
-export async function mineEmeraldsAction() {
+export async function mineEmeraldsAction(): Promise<void> {
   const user = await getSessionUser();
-  if (!user) return redirect('/login');
+  if (!user) redirect('/login');
 
   user.miners = user.miners || [];
   if (user.miners.length > 0) {
@@ -138,17 +135,15 @@ export async function mineEmeraldsAction() {
   }
 }
 
-export async function claimDailyBonusAction() {
+export async function claimDailyBonusAction(): Promise<void> {
   const user = await getSessionUser();
-  if (!user) return redirect('/login');
+  if (!user) redirect('/login');
 
   const now = Date.now();
   const oneDayMs = 24 * 60 * 60 * 1000;
   const lastBonus = user.lastDailyBonus || 0;
 
-  if (now - lastBonus < oneDayMs) {
-    return { error: 'Already claimed today!' };
-  }
+  if (now - lastBonus < oneDayMs) { revalidatePath('/dashboard'); return; }
 
   user.dailyStreak = now - lastBonus < 2 * oneDayMs ? (user.dailyStreak || 0) + 1 : 1;
 
@@ -158,19 +153,18 @@ export async function claimDailyBonusAction() {
   user.lastDailyBonus = now;
   saveUser(user);
   revalidatePath('/dashboard');
-  return { success: `+${bonus} Emeralds! Streak: ${user.dailyStreak} days` };
 }
 
 // ─── PAYMENTS ──────────────────────────────────────
 
-export async function depositAction(formData: FormData) {
+export async function depositAction(formData: FormData): Promise<void> {
   const user = await getSessionUser();
-  if (!user) return redirect('/login');
+  if (!user) redirect('/login');
 
   const amount = parseInt(formData.get('amount') as string);
   const currency = (formData.get('currency') as string) || 'usdttrc20';
 
-  if (isNaN(amount) || amount < 5) return { error: 'Minimum deposit is $5' };
+  if (isNaN(amount) || amount < 5) { revalidatePath('/dashboard'); return; }
 
   const tx: Transaction = {
     id: Date.now().toString(),
@@ -187,23 +181,24 @@ export async function depositAction(formData: FormData) {
     tx.nowpaymentsId = invoice.id;
     saveTransaction(tx);
     if (invoice.invoice_url) redirect(invoice.invoice_url);
-    return { success: 'Invoice created.' };
   } catch (e: any) {
-    return { error: 'Failed to create invoice: ' + e.message };
+    console.error('Deposit error:', e.message);
   }
+  revalidatePath('/dashboard');
 }
 
-export async function withdrawAction(formData: FormData) {
+export async function withdrawAction(formData: FormData): Promise<void> {
   const user = await getSessionUser();
-  if (!user) return redirect('/login');
+  if (!user) redirect('/login');
 
   const amount = parseInt(formData.get('amount') as string);
   const wallet = formData.get('wallet') as string;
   const currency = (formData.get('currency') as string) || 'usdttrc20';
 
-  if (isNaN(amount) || amount <= 0) return { error: 'Invalid amount' };
-  if (amount > user.usdBalance) return { error: 'Insufficient funds' };
-  if (!wallet) return { error: 'Wallet address required' };
+  if (isNaN(amount) || amount <= 0 || amount > user.usdBalance || !wallet) {
+    revalidatePath('/dashboard');
+    return;
+  }
 
   user.usdBalance -= amount;
   user.emeralds -= amount;
@@ -234,11 +229,10 @@ export async function withdrawAction(formData: FormData) {
     saveUser(user);
     tx.status = 'FAILED';
     saveTransaction(tx);
-    return { error: 'Payout failed: ' + e.message };
+    console.error('Payout error:', e.message);
   }
 
   revalidatePath('/dashboard');
-  return { success: `Withdrawal of $${amount} initiated` };
 }
 
 // ─── ADMIN ──────────────────────────────────────────
