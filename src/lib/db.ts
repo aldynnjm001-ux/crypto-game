@@ -47,24 +47,36 @@ export interface DbData {
 
 const defaultData: DbData = { users: [], transactions: [], totalPaid: 0 };
 
+let memoryDb: DbData | null = null;
+
 export function getDb(): DbData {
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(defaultData, null, 2));
-    return defaultData;
-  }
-  const raw = fs.readFileSync(DB_FILE, 'utf-8');
+  if (memoryDb) return memoryDb;
   try {
+    if (!fs.existsSync(DB_FILE)) {
+      fs.writeFileSync(DB_FILE, JSON.stringify(defaultData, null, 2));
+      memoryDb = defaultData;
+      return memoryDb;
+    }
+    const raw = fs.readFileSync(DB_FILE, 'utf-8');
     const data = JSON.parse(raw);
     if (!data.transactions) data.transactions = [];
     if (!data.totalPaid) data.totalPaid = 0;
-    return data as DbData;
+    memoryDb = data as DbData;
+    return memoryDb;
   } catch (e) {
-    return defaultData;
+    console.error("FS Error in getDb:", e);
+    memoryDb = defaultData;
+    return memoryDb;
   }
 }
 
 export function saveDb(data: DbData) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+  memoryDb = data;
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error("FS Error in saveDb:", e);
+  }
 }
 
 export function getUser(username: string): User | undefined {
