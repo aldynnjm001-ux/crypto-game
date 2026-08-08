@@ -20,31 +20,32 @@ export async function getSessionUser() {
 
 // ─── AUTH ──────────────────────────────────────────
 
-export async function loginAction(formData: FormData): Promise<void> {
+export async function loginAction(formData: FormData) {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
-  if (!username || !password) redirect('/login');
+  if (!username || !password) return { error: 'Username and password are required' };
   const user = getUser(username);
-  if (!user) redirect('/login');
+  if (!user) return { error: 'Invalid credentials' };
 
   const valid = user.passwordHash.startsWith('$2')
     ? await bcrypt.compare(password, user.passwordHash)
     : user.passwordHash === password;
 
-  if (!valid) redirect('/login');
+  if (!valid) return { error: 'Invalid credentials' };
   (await cookies()).set('session', user.id, { httpOnly: true, sameSite: 'lax' });
-  redirect('/dashboard');
+  return { success: true };
 }
 
-export async function registerAction(formData: FormData): Promise<void> {
+export async function registerAction(formData: FormData) {
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
   const email = (formData.get('email') as string) || '';
   const refCode = (formData.get('ref') as string) || '';
 
-  if (!username || !password) redirect('/register');
-  if (username.length < 3 || password.length < 6) redirect('/register');
-  if (getUser(username)) redirect('/register');
+  if (!username || !password) return { error: 'Required fields missing' };
+  if (username.length < 3) return { error: 'Username must be at least 3 characters' };
+  if (password.length < 6) return { error: 'Password must be at least 6 characters' };
+  if (getUser(username)) return { error: 'Username already taken' };
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -72,7 +73,7 @@ export async function registerAction(formData: FormData): Promise<void> {
 
   saveUser(newUser);
   (await cookies()).set('session', newUser.id, { httpOnly: true, sameSite: 'lax' });
-  redirect('/dashboard');
+  return { success: true };
 }
 
 export async function logoutAction(): Promise<void> {
